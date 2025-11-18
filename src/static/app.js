@@ -1,8 +1,18 @@
 document.addEventListener("DOMContentLoaded", () => {
   const capabilitiesList = document.getElementById("capabilities-list");
-  const capabilitySelect = document.getElementById("capability");
-  const registerForm = document.getElementById("register-form");
   const messageDiv = document.getElementById("message");
+
+  // Function to show message
+  function showMessage(text, type) {
+    messageDiv.textContent = text;
+    messageDiv.className = type;
+    messageDiv.classList.remove("hidden");
+
+    // Hide message after 5 seconds
+    setTimeout(() => {
+      messageDiv.classList.add("hidden");
+    }, 5000);
+  }
 
   // Function to fetch capabilities from API
   async function fetchCapabilities() {
@@ -35,37 +45,105 @@ document.addEventListener("DOMContentLoaded", () => {
                   .join("")}
               </ul>
             </div>`
-            : `<p><em>No consultants registered yet</em></p>`;
+            : `<p class="no-consultants"><em>No consultants registered yet</em></p>`;
 
         capabilityCard.innerHTML = `
           <h4>${name}</h4>
-          <p>${details.description}</p>
-          <p><strong>Practice Area:</strong> ${details.practice_area}</p>
-          <p><strong>Industry Verticals:</strong> ${details.industry_verticals ? details.industry_verticals.join(', ') : 'Not specified'}</p>
-          <p><strong>Capacity:</strong> ${availableCapacity} hours/week available</p>
-          <p><strong>Current Team:</strong> ${currentConsultants} consultants</p>
+          <p class="description">${details.description}</p>
+          <div class="capability-meta">
+            <p><strong>Practice Area:</strong> ${details.practice_area}</p>
+            <p><strong>Industry Verticals:</strong> ${details.industry_verticals ? details.industry_verticals.join(', ') : 'Not specified'}</p>
+            <p><strong>Capacity:</strong> ${availableCapacity} hours/week available</p>
+            <p><strong>Current Team:</strong> ${currentConsultants} consultants</p>
+          </div>
           <div class="consultants-container">
             ${consultantsHTML}
+          </div>
+          <div class="register-inline">
+            <input type="email" class="inline-email" placeholder="your-email@slalom.com" data-capability="${name}" />
+            <button class="register-btn" data-capability="${name}">Register Expertise</button>
           </div>
         `;
 
         capabilitiesList.appendChild(capabilityCard);
-
-        // Add option to select dropdown
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = name;
-        capabilitySelect.appendChild(option);
       });
 
       // Add event listeners to delete buttons
       document.querySelectorAll(".delete-btn").forEach((button) => {
         button.addEventListener("click", handleUnregister);
       });
+
+      // Add event listeners to register buttons
+      document.querySelectorAll(".register-btn").forEach((button) => {
+        button.addEventListener("click", handleRegister);
+      });
+
+      // Add enter key support for email inputs
+      document.querySelectorAll(".inline-email").forEach((input) => {
+        input.addEventListener("keypress", (e) => {
+          if (e.key === "Enter") {
+            const capability = input.getAttribute("data-capability");
+            const registerBtn = document.querySelector(
+              `.register-btn[data-capability="${capability}"]`
+            );
+            registerBtn.click();
+          }
+        });
+      });
     } catch (error) {
       capabilitiesList.innerHTML =
         "<p>Failed to load capabilities. Please try again later.</p>";
       console.error("Error fetching capabilities:", error);
+    }
+  }
+
+  // Handle inline registration
+  async function handleRegister(event) {
+    const button = event.target;
+    const capability = button.getAttribute("data-capability");
+    const emailInput = document.querySelector(
+      `.inline-email[data-capability="${capability}"]`
+    );
+    const email = emailInput.value.trim();
+
+    if (!email) {
+      showMessage("Please enter an email address", "error");
+      emailInput.focus();
+      return;
+    }
+
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      showMessage("Please enter a valid email address", "error");
+      emailInput.focus();
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/capabilities/${encodeURIComponent(
+          capability
+        )}/register?email=${encodeURIComponent(email)}`,
+        {
+          method: "POST",
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok) {
+        showMessage(result.message, "success");
+        emailInput.value = ""; // Clear input
+
+        // Refresh capabilities list to show updated consultants
+        fetchCapabilities();
+      } else {
+        showMessage(result.detail || "An error occurred", "error");
+      }
+    } catch (error) {
+      showMessage("Failed to register. Please try again.", "error");
+      console.error("Error registering:", error);
     }
   }
 
@@ -88,74 +166,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.className = "success";
+        showMessage(result.message, "success");
 
         // Refresh capabilities list to show updated consultants
         fetchCapabilities();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        showMessage(result.detail || "An error occurred", "error");
       }
-
-      messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
     } catch (error) {
-      messageDiv.textContent = "Failed to unregister. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
+      showMessage("Failed to unregister. Please try again.", "error");
       console.error("Error unregistering:", error);
     }
   }
-
-  // Handle form submission
-  registerForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-
-    const email = document.getElementById("email").value;
-    const capability = document.getElementById("capability").value;
-
-    try {
-      const response = await fetch(
-        `/capabilities/${encodeURIComponent(
-          capability
-        )}/register?email=${encodeURIComponent(email)}`,
-        {
-          method: "POST",
-        }
-      );
-
-      const result = await response.json();
-
-      if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.className = "success";
-        registerForm.reset();
-
-        // Refresh capabilities list to show updated consultants
-        fetchCapabilities();
-      } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
-      }
-
-      messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
-    } catch (error) {
-      messageDiv.textContent = "Failed to register. Please try again.";
-      messageDiv.className = "error";
-      messageDiv.classList.remove("hidden");
-      console.error("Error registering:", error);
-    }
-  });
 
   // Initialize app
   fetchCapabilities();
